@@ -4,30 +4,25 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import DataRequired, Length, EqualTo, ValidationError
+from wtforms.validators import DataRequired, Length, EqualTo
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app2 = Flask(__name__)
+app2.config['SECRET_KEY'] = 'your_secret_key'
+app2.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 
-db = SQLAlchemy(app)
-login_manager = LoginManager(app)
+db = SQLAlchemy(app2)
+login_manager = LoginManager(app2)
 login_manager.login_view = 'login'
-login_manager.login_message_category = 'info'
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
 
-
-    # UserMixin provides default implementations for is_authenticated, is_active, and is_anonymous
-    def set_password(self, password):
-        self.password = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password, password)
-
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('Login')
 
 class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
@@ -35,50 +30,15 @@ class RegisterForm(FlaskForm):
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField('Register')
 
-    def validate_username(self, username):
-        existing_user = User.query.filter_by(username = username.data).first()
-        if existing_user:
-            raise ValidationError('This username is already taken.')
-        
-    # def __repr__(self) -> str:
-    #     return f"{self.username} - {self.password}"
-
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-class LoginForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired()])
-    password = PasswordField('Password', validators=[DataRequired()])
-    submit = SubmitField('Login')
-
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-@app.route('/')
+@app2.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('home'))
-    
-    form = RegisterForm()
-    if form.validate_on_submit():
-        hashed_password = generate_password_hash(form.password.data, method='sha256')
-        user = User(username = form.username.data, password = hashed_password)
-        db.session.add(user)
-        db.session.commit()
-        flash('Your account has been created!', 'success')
-        return redirect(url_for('login'))
-    return render_template('register.html', title='Register', form = form)
-
-@app.route('/login', methods=['GET', 'POST'])
+@app2.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
@@ -89,16 +49,30 @@ def login():
             return redirect(url_for('chat'))
         else:
             flash('Login failed. Check username and/or password', 'danger')
-    return render_template('login.html', title = 'login',  form=form)
+    return render_template('login.html', form=form)
 
-@app.route('/logout')
+
+@app2.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm()
+    if form.validate_on_submit():
+        hashed_password = generate_password_hash(form.password.data, method='sha256')
+        user = User(username=form.username.data, password=hashed_password)
+        db.session.add(user)
+        db.session.commit()
+        flash('Account created!', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html', form=form)
+
+
+@app2.route('/logout')
 @login_required
 def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
 
-@app.route('/chat', methods=['GET', 'POST'])
+@app2.route('/chat', methods=['GET', 'POST'])
 @login_required
 def chat():
     if request.method == 'POST':
@@ -119,6 +93,6 @@ def chatbot_response(user_input):
     return responses.get(user_input.lower(), "Sorry, I don't understand that.")
 
 if __name__ == '__main__':
-    with app.app_context():
+    with app2.app_context():
         db.create_all()  # Ensure tables are created
-    app.run(debug=True, port=8000)
+    app2.run(debug=True)

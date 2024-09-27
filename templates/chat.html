@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -22,9 +22,73 @@
 </head>
 <body>
     <h1>Chat with Bot</h1>
+    {% if current_user.is_authenticated %}
+     HiI {{ current_user.name }}!
+    {% endif %}
     <input type="text" id="message" placeholder="Type your message">
     <button onclick="sendMessage()">Send</button>
     <p id="response"></p>
     <a href="{{ url_for('index') }}">Back to Home</a>
 </body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        function sendMessage() {
+            const message = document.getElementById("message").value;
+            fetch('/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 'message': message }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("response").innerText = data.response;
+                document.getElementById("message").value = ''; // Clear input after sending
+            });
+        }
+    </script>
+</head>
+<body>
+
+    <div class="container mt-5">
+        <h1 class="text-center">Chat with Bot</h1>
+        
+        <!-- Display user info if logged in -->
+        {% if current_user.is_authenticated %}
+        <div class="alert alert-success text-center">
+            Hi {{ current_user.name }}!
+        </div>
+        {% endif %}
+        
+        <!-- Chat Input and Send Button -->
+        <div class="input-group mb-3">
+            <input type="text" id="message" class="form-control" placeholder="Type your message">
+            <div class="input-group-append">
+                <button class="btn btn-primary" type="button" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+        
+        <!-- Chatbot Response -->
+        <p id="response" class="alert alert-info text-center"></p>
+        
+        <!-- Back to Home Link -->
+        <div class="text-center">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
 </html>
+
