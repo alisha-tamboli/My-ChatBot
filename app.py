@@ -1,64 +1,55 @@
-from flask import Flask, render_template, redirect, url_for, request, session, flash, jsonify
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_pymongo import PyMongo
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Length, EqualTo, ValidationError
+from flask_wtf import FlaskForm
+from bson.objectid import ObjectId
+from bson import ObjectId 
+import os
 
+# Flask app setup
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['SECRET_KEY'] = 'your_secret_key'  # Update with a strong key
+app.config['MONGO_URI'] = 'mongodb://localhost:27017/chatbot_db'  # Replace with your MongoDB URI
 
-db = SQLAlchemy(app)
+mongo = PyMongo(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
-login_manager.login_message_category = 'info'
 
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
+# Flask-Login User class
+class User(UserMixin):
+    def __init__(self, user_id):
+        self.id = str(user_id)
 
+# Login manager loader function
+@login_manager.user_loader
+def load_user(user_id):
+    try:
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if user:
+            return User(user_id)  # Return the User object
+    except Exception as e:
+        return None  # Return None if user_id is invalid
 
-    # UserMixin provides default implementations for is_authenticated, is_active, and is_anonymous
-    def set_password(self, password):
-        self.password = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password, password)
-
-
+# WTForms for registration and login
 class RegisterForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
-    password = PasswordField('Password', validators=[DataRequired()])
+    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=20)])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField('Register')
 
     def validate_username(self, username):
-        existing_user = User.query.filter_by(username = username.data).first()
-        if existing_user:
+        if mongo.db.users.find_one({"username": username.data}):
             raise ValidationError('This username is already taken.')
-        
-    # def __repr__(self) -> str:
-    #     return f"{self.username} - {self.password}"
-
-    def __repr__(self):
-        return f'<User {self.username}>'
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])
     submit = SubmitField('Login')
 
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
+# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -66,30 +57,45 @@ def index():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('home'))
-    
+        return redirect(url_for('chat'))
+
     form = RegisterForm()
     if form.validate_on_submit():
-        hashed_password = generate_password_hash(form.password.data, method='sha256')
-        user = User(username = form.username.data, password = hashed_password)
-        db.session.add(user)
-        db.session.commit()
+        existing_user = mongo.db.users.find_one({"username": form.username.data})
+        if existing_user:
+            flash('This username is already taken.', 'danger')
+            return redirect(url_for('register'))
+        
+        hashed_password = generate_password_hash(form.password.data)
+        user = {
+            "username": form.username.data,
+            "password": hashed_password
+        }
+        mongo.db.users.insert_one(user)
         flash('Your account has been created!', 'success')
         return redirect(url_for('login'))
-    return render_template('register.html', title='Register', form = form)
+
+    return render_template('register.html', form=form)
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('chat'))
+
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(username=form.username.data).first()
-        if user and check_password_hash(user.password, form.password.data):
-            login_user(user)
-            flash('Login successful', 'success')
+        user = mongo.db.users.find_one({"username": form.username.data})
+        if user and check_password_hash(user['password'], form.password.data):
+            login_user(User(str(user['_id'])))  # Convert ObjectId to string
+            # login_user(User(user['_id']))
+            flash('Login successful!', 'success')
             return redirect(url_for('chat'))
         else:
-            flash('Login failed. Check username and/or password', 'danger')
-    return render_template('login.html', title = 'login',  form=form)
+            flash('Login failed. Check your username or password.', 'danger')
+
+    return render_template('login.html', form=form)
+
 
 @app.route('/logout')
 @login_required
@@ -98,27 +104,28 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
 
+
 @app.route('/chat', methods=['GET', 'POST'])
 @login_required
 def chat():
     if request.method == 'POST':
-        user_input = request.json.get('message')
+        user_input = request.json.get('message', '')
+        if not user_input:
+            return jsonify({"response": "Please provide a message."})
         response = chatbot_response(user_input)
         return jsonify({"response": response})
     return render_template('chat.html')
 
+# Chatbot logic
 def chatbot_response(user_input):
-    # Replace with your actual chatbot logic using NLP or other techniques
     responses = {
-        "hi": "Hello! How can I help you today?",
-        "how are yoy?" : "I am good.",
-        "Can you cat with me" : "Sure, \n Hi, How are you?",
-        "what is your name": "I am a simple chatbot.",
-        "bye": "Goodbye! Have a great day!"
+        "hi": "Hello! How can I assist you?",
+        "how are you?": "I'm just a bot, but I'm doing great!",
+        "what's your name?": "I'm your friendly chatbot!",
+        "bye": "Goodbye! Have a great day!",
+        "tell me something about yourself?": "I am here to help you with anything you need."
     }
-    return responses.get(user_input.lower(), "Sorry, I don't understand that.")
+    return responses.get(user_input.lower(), "I'm not sure how to respond to that.")
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()  # Ensure tables are created
     app.run(debug=True, port=8000)
