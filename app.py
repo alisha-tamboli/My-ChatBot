@@ -41,7 +41,8 @@ class RegisterForm(FlaskForm):
     submit = SubmitField('Register')
 
     def validate_username(self, username):
-        if mongo.db.users.find_one({"username": username.data}):
+        existing_user = mongo.db.users.find_one({"username": username.data})
+        if existing_user:
             raise ValidationError('This username is already taken.')
 
 class LoginForm(FlaskForm):
@@ -56,9 +57,6 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('chat'))
-
     form = RegisterForm()
     if form.validate_on_submit():
         existing_user = mongo.db.users.find_one({"username": form.username.data})
@@ -80,21 +78,21 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+
     if current_user.is_authenticated:
-        return redirect(url_for('chat'))
+        form = LoginForm()
+        if form.validate_on_submit():
+            user = mongo.db.users.find_one({"username": form.username.data})
+            if user and check_password_hash(user['password'], form.password.data):
+                login_user(User(str(user['_id'])))  # Convert ObjectId to string
+                # login_user(User(user['_id']))
+                # mongo.db.users.insert_one(user)
+                flash('Login successful!', 'success')
+                return redirect(url_for('chat'))
+            else:
+                flash('Login failed. Check your username or password.', 'danger')
 
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = mongo.db.users.find_one({"username": form.username.data})
-        if user and check_password_hash(user['password'], form.password.data):
-            login_user(User(str(user['_id'])))  # Convert ObjectId to string
-            # login_user(User(user['_id']))
-            flash('Login successful!', 'success')
-            return redirect(url_for('chat'))
-        else:
-            flash('Login failed. Check your username or password.', 'danger')
-
-    return render_template('login.html', form=form)
+        return render_template('login.html', form=form)
 
 
 @app.route('/logout')
