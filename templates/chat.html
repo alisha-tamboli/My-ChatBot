@@ -5,32 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat</title>
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .inner-container {
+            display: flex;
+            align-items: center;
+            align-content: center;
+            gap: 23.5rem;
+
+        }
+        .inner-inner-container {
+            text-align: center;
+        }
+    </style>
     <script>
         function sendMessage() {
-            const messageInput = document.getElementById("message"); // Get the message input element
-            const message = messageInput.value.trim(); // Trim spaces
-
+            const messageInput = document.getElementById("message");
+            const message = messageInput.value.trim();
             if (!message) {
-                alert("Please type a message before sending."); // Prevent sending empty messages
+                alert("Please type a message before sending.");
                 return;
             }
 
             fetch('/chat', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ message: message }) // Send the message to the backend
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message })
             })
             .then(response => response.json())
             .then(data => {
-                const chatBox = document.getElementById("response"); // Get the chat response container
-                
-                // Append user input and chatbot response to the chat box
+                const chatBox = document.getElementById("chat-box");
                 const userMessage = `<p><strong>You:</strong> ${message}</p>`;
                 const botResponse = `<p><strong>Bot:</strong> ${data.response}</p>`;
                 chatBox.innerHTML += userMessage + botResponse;
-
                 messageInput.value = ''; // Clear the input field
             })
             .catch(error => console.error('Error:', error));
@@ -38,48 +44,38 @@
     </script>
 </head>
 <body>
-
     <div class="container mt-5">
-        <h1 class="text-center">Chat with Bot</h1>
-        
-
+        <div class="inner-container">
+            <img src="{{ url_for('static', filename='bot2.jpg') }}" width="80rem" class="d-inline-block align-top" alt="Logo">
+            <div class="inner-inner-container">
+                <h1 class="text-center" style="font-family:sans-serif; color: rgb(5, 61, 5);">Chat with Bot</h1>
+            </div>
+        </div>
+     
         {% if current_user.is_authenticated %}
         <div class="alert alert-success text-center">
             Hi {{ current_user.username }}!
         </div>
         {% endif %}
-        
-        <!-- Chat Input and Send Button -->
-        <div class="input-group mb-3">
-            <input type="text" id="message" class="form-control" placeholder="Type your message">
-            <div class="input-group-append">
-                <button class="btn btn-primary" type="button" onclick="sendMessage()">Send</button>
-            </div>
+
+        <div id="chat-box" class="border p-3 rounded" style="background-color: #f8f9fa; max-height: 400px; overflow-y: auto;">
+            {% for chat in chat_history %}
+                <p><strong>You:</strong> {{ chat.user_input }}</p>
+                <p><strong>Bot:</strong> {{ chat.bot_response }}</p>
+            {% endfor %}
         </div>
-        
-        <!-- Chatbot Response -->
-        <div id="response" class="border p-3 rounded" style="background-color: #f8f9fa; max-height: 400px; overflow-y: auto;"></div>
-        
-        <div class="text-center mt-3">
-            <a href="{{ url_for('index') }}" class="btn btn-danger mt-3">Logout</a>
+
+        <div class="input-group mt-3">
+            <!-- Adjust column size for input and button -->
+            <input type="text" id="message" class="form-control col-8" style="max-width: 90%;" placeholder="Type your message">&nbsp;&nbsp;&nbsp;
+            <button class="btn btn-success" style="font-size: 1rem; width: 10rem;" type="button" onclick="sendMessage()">Send</button>
         </div>
         
         <div class="text-center mt-3">
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
+            <a href="{{ url_for('index') }}" class="btn btn-success mt-3">Logout</a>
         </div>
+    
     </div>
-
-    <!-- <div id="chat-history">
-        {% for chat in chat_history %}
-            <div>
-                <strong>{{ chat.username }}:</strong> {{ chat.message }}
-                <p>{{ chat.response }}</p>
-            </div>
-        {% endfor %}
-    </div> -->
-
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
+
