@@ -81,7 +81,7 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
 
-    if current_user.is_authenticated:
+    # if current_user.is_authenticated:
         form = LoginForm()
         if form.validate_on_submit():
             user = mongo.db.users.find_one({"username": form.username.data})
