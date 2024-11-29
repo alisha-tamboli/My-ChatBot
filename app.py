@@ -20,19 +20,17 @@ login_manager.login_view = 'login'
 
 # Flask-Login User class
 class User(UserMixin):
-    def __init__(self, user_id):
+    def __init__(self, user_id,username=None):
         self.id = str(user_id)
+        self.username = username 
 
-# Login manager loader function
 @login_manager.user_loader
 def load_user(user_id):
-    try:
-        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
-        if user:
-            return User(user_id)  # Return the User object
-    except Exception as e:
-        return None  # Return None if user_id is invalid
-    
+    user_data = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+    if user_data:
+        return User(user_id=str(user_data["_id"]), username=user_data.get("username"))
+    return None
+
 
 # WTForms for registration and login
 class RegisterForm(FlaskForm):
@@ -57,6 +55,8 @@ class LoginForm(FlaskForm):
 def index():
     return render_template('index.html')
 
+
+# Register route
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm()
@@ -77,24 +77,89 @@ def register():
 
     return render_template('register.html', form=form)
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-
-    # if current_user.is_authenticated:
-        form = LoginForm()
-        if form.validate_on_submit():
-            user = mongo.db.users.find_one({"username": form.username.data})
-            if user and check_password_hash(user['password'], form.password.data):
-                login_user(User(str(user['_id'])))  # Convert ObjectId to string
-                flash('Login successful!', 'success')
-                return redirect(url_for('chat'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        # Find the user in the database
+        user = mongo.db.users.find_one({"username": form.username.data})
+        
+        if user and check_password_hash(user['password'], form.password.data):
+            # Login the user
+            login_user(User(str(user['_id'])))  # Convert ObjectId to string
+            
+            # Check if the user is an admin
+            if user.get('role') == 'admin':
+                flash('Admin login successful!', 'success')
+                return redirect(url_for('admin_dashboard'))  # Redirect to admin dashboard
             else:
-                flash('Login failed. Check your username or password.', 'danger')
+                flash('User login successful!', 'success')
+                return redirect(url_for('chat'))  # Redirect to user chat page
+        else:
+            flash('Login failed. Check your username or password.', 'danger')
 
-        return render_template('login.html', form=form)
+    return render_template('login.html', form=form)
 
 
+@app.route('/admin/add_intent', methods=['GET', 'POST'])
+@login_required
+
+def add_intent():
+    if current_user.username != "admin":  # Ensure only admin can access
+        flash("Access Denied.", "danger")
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        intent_name = request.form.get('intent_name')
+        training_phrases = request.form.get('training_phrases', '').split(',')
+        responses = request.form.get('responses', '').split(',')
+
+        # Validate input
+        if not intent_name or not training_phrases or not responses:
+            flash("All fields are required.", "danger")
+            return redirect(url_for('add_intent'))
+
+        # Insert into MongoDB
+        intent = {
+            "intent_name": intent_name.strip(),
+            "training_phrases": [phrase.strip() for phrase in training_phrases],
+            "responses": [response.strip() for response in responses]
+        }
+        mongo.db.intents.insert_one(intent)
+        flash("Intent added successfully!", "success")
+        return redirect(url_for('add_intent'))
+
+    return render_template('add_intent.html')
+
+
+
+@app.route('/chat', methods=['GET', 'POST'])
+@login_required
+def chat():
+    if request.method == 'POST':
+        user_input = request.json.get('message', '').strip().lower()
+
+        if not user_input:
+            return jsonify({"response": "Please provide a message."})
+
+        # Query MongoDB for matching intent
+        intent = mongo.db.intents.find_one({
+            "training_phrases": {"$in": [user_input]}
+        })
+
+        # Return a random response from the matched intent
+        if intent:
+            from random import choice
+            response = choice(intent['responses'])
+        else:
+            response = "I'm not sure how to respond to that."
+
+        return jsonify({"response": response})
+
+    return render_template('chat.html')
+
+
+# Logout route
 @app.route('/logout')
 @login_required
 def logout():
@@ -103,30 +168,5 @@ def logout():
     return redirect(url_for('index'))
 
 
-@app.route('/chat', methods=['GET', 'POST'])
-@login_required
-def chat():
-    if request.method == 'POST':
-        user_input = request.json.get('message', '')
-        if not user_input:
-            return jsonify({"response": "Please provide a message."})
-        response = chatbot_response(user_input)
-        return jsonify({"response": response})
-    return render_template('chat.html')
-
-
-# Chatbot logic
-def chatbot_response(user_input):
-    responses = {
-        "hi": "Hello! How can I assist you?",
-        "how are you?": "I'm just a bot, but I'm doing great!",
-        "what's your name?": "I'm your friendly chatbot!",
-        "bye": "Goodbye! Have a great day!",
-        "tell me something about yourself?": "I am here to help you with anything you need."
-    }
-    return responses.get(user_input.lower(), "I'm not sure how to respond to that.")
-
-
-
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)
