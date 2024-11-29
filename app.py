@@ -32,6 +32,7 @@ def load_user(user_id):
             return User(user_id)  # Return the User object
     except Exception as e:
         return None  # Return None if user_id is invalid
+    
 
 # WTForms for registration and login
 class RegisterForm(FlaskForm):
@@ -44,6 +45,7 @@ class RegisterForm(FlaskForm):
         existing_user = mongo.db.users.find_one({"username": username.data})
         if existing_user:
             raise ValidationError('This username is already taken.')
+        
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -85,8 +87,6 @@ def login():
             user = mongo.db.users.find_one({"username": form.username.data})
             if user and check_password_hash(user['password'], form.password.data):
                 login_user(User(str(user['_id'])))  # Convert ObjectId to string
-                # login_user(User(user['_id']))
-                # mongo.db.users.insert_one(user)
                 flash('Login successful!', 'success')
                 return redirect(url_for('chat'))
             else:
@@ -114,6 +114,7 @@ def chat():
         return jsonify({"response": response})
     return render_template('chat.html')
 
+
 # Chatbot logic
 def chatbot_response(user_input):
     responses = {
@@ -125,5 +126,7 @@ def chatbot_response(user_input):
     }
     return responses.get(user_input.lower(), "I'm not sure how to respond to that.")
 
+
+
 if __name__ == '__main__':
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=5000)

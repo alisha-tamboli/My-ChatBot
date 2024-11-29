@@ -42,7 +42,7 @@
     <div class="container mt-5">
         <h1 class="text-center">Chat with Bot</h1>
         
-        <!-- Display user info if logged in -->
+
         {% if current_user.is_authenticated %}
         <div class="alert alert-success text-center">
             Hi {{ current_user.username }}!
@@ -60,15 +60,23 @@
         <!-- Chatbot Response -->
         <div id="response" class="border p-3 rounded" style="background-color: #f8f9fa; max-height: 400px; overflow-y: auto;"></div>
         
-        <!-- Logout Form -->
-        <form method="POST" action="/logout">
-            <button type="submit" class="btn btn-danger mt-3">Log out</button>
-        </form>
+        <div class="text-center mt-3">
+            <a href="{{ url_for('index') }}" class="btn btn-danger mt-3">Logout</a>
+        </div>
         
         <div class="text-center mt-3">
             <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
         </div>
     </div>
+
+    <!-- <div id="chat-history">
+        {% for chat in chat_history %}
+            <div>
+                <strong>{{ chat.username }}:</strong> {{ chat.message }}
+                <p>{{ chat.response }}</p>
+            </div>
+        {% endfor %}
+    </div> -->
 
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
