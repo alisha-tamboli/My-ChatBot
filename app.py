@@ -7,7 +7,9 @@ from wtforms.validators import DataRequired, Length, EqualTo, ValidationError
 from flask_wtf import FlaskForm
 from bson.objectid import ObjectId
 from bson import ObjectId 
+from random import choice
 import os
+import re
 
 # Flask app setup
 app = Flask(__name__)
@@ -20,9 +22,10 @@ login_manager.login_view = 'login'
 
 # Flask-Login User class
 class User(UserMixin):
-    def __init__(self, user_id,username=None):
+    def __init__(self, user_id, username=None):
         self.id = str(user_id)
         self.username = username 
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -77,6 +80,7 @@ def register():
 
     return render_template('register.html', form=form)
 
+# Login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -86,12 +90,11 @@ def login():
         
         if user and check_password_hash(user['password'], form.password.data):
             # Login the user
-            login_user(User(str(user['_id'])))  # Convert ObjectId to string
+            login_user(User(str(user['_id']), user.get('username')))  # Convert ObjectId to string
             
-            # Check if the user is an admin
-            if user.get('role') == 'admin':
+            if user.get('username') == 'admin':  # Check if user is an admin
                 flash('Admin login successful!', 'success')
-                return redirect(url_for('admin_dashboard'))  # Redirect to admin dashboard
+                return redirect(url_for('add_intent'))  # Redirect to Add Intent page
             else:
                 flash('User login successful!', 'success')
                 return redirect(url_for('chat'))  # Redirect to user chat page
@@ -101,13 +104,14 @@ def login():
     return render_template('login.html', form=form)
 
 
+# Add intent route, Only admin can see this route
 @app.route('/admin/add_intent', methods=['GET', 'POST'])
 @login_required
 
 def add_intent():
-    if current_user.username != "admin":  # Ensure only admin can access
-        flash("Access Denied.", "danger")
-        return redirect(url_for('index'))
+    if not current_user.is_authenticated or current_user.username != 'admin':
+        flash('Access denied. Admins only!', 'danger')
+        return redirect(url_for('login'))
 
     if request.method == 'POST':
         intent_name = request.form.get('intent_name')
@@ -131,8 +135,7 @@ def add_intent():
 
     return render_template('add_intent.html')
 
-
-
+# Chat route
 @app.route('/chat', methods=['GET', 'POST'])
 @login_required
 def chat():
@@ -148,11 +151,14 @@ def chat():
         })
 
         # Return a random response from the matched intent
-        if intent:
-            from random import choice
-            response = choice(intent['responses'])
-        else:
-            response = "I'm not sure how to respond to that."
+        try:
+            intent = mongo.db.intents.find_one({
+                "training_phrases":  {"$regex": f"^{user_input}$", "$options": "i"} 
+            })
+            response = choice(intent['responses']) if intent and intent['responses'] else "Sorry, I am not understand that."
+        except Exception as e:
+            response = f"Error: {str(e)}"
+
 
         return jsonify({"response": response})
 
@@ -169,4 +175,4 @@ def logout():
 
 
 if __name__ == '__main__':
-    app.run(debug=False, port=5000)
+    app.run(debug=True, port=5000)
